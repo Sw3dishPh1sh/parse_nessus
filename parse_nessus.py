@@ -21,7 +21,7 @@ def main():
 	
 	with open(args.output, 'wb') as fh:
 		if args.format == 'csv':
-			fieldnames = ["Vuln ID", "Title", "Synopsis", "Risk", "IP", "Protocol", "Port"]
+			fieldnames = ["Vuln ID", "Title", "Synopsis", "Description", "Risk", "CVSS", "Solution", "Hostname", "Protocol", "Port", "References"]
 			writer = csv.DictWriter(fh, fieldnames=fieldnames)
 			writer.writeheader()
 			writer.writerows(nessus_rows)
@@ -38,12 +38,27 @@ def parse_nessus_html(html_data):
 		vuln_title = vuln.text.split(' - ', 1)[1]
 		synopsis_text = vuln.find_next(text="Synopsis").parent.find_next('div').find_next('div').text.strip()
 		risk_text = vuln.find_next(text="Risk Factor").parent.find_next('div').find_next('div').text.strip()
-
+		solution_text = vuln.find_next(text="Solution").parent.find_next('div').find_next('div').text.strip()
+		description_text = vuln.find_next(text="Description").parent.find_next('div').find_next('div').text.strip()
+		try:
+			CVSS_text = vuln.find_next(text="CVSS v3.0 Base Score").parent.find_next('div').find_next('div').text.strip()
+		except AttributeError:
+			CVSS_text = 'N/A'
+		try:
+			References_text = vuln.find_next(text="References").parent.find_next('div').find_next('div').text.strip()
+		except AttributeError:
+			References_text = 'N/A'
+		
+		plugin_output_elem2 = vuln.find_previous(text="DNS Name:").parent
+		systems = []
+		for sib in plugin_output_elem2.next_siblings:
+			if sib.name == 'td' and "report output too big - ending list here" not in sib.text :
+				ip = sib.text
 		plugin_output_elem = vuln.find_next(text="Plugin Output").parent
 		systems = []
 		for sib in plugin_output_elem.next_siblings:
 			if sib.name == 'h2' and "report output too big - ending list here" not in sib.text :
-				ip, proto = sib.text.split(" ", 1)
+				proto = sib.text
 				proto, port = proto.strip("()").split('/', 1)
 				systems.append([ip, proto, port])
 			elif sib.name == 'div' and 'id' in sib.attrs:
@@ -54,10 +69,14 @@ def parse_nessus_html(html_data):
 			row = { "Vuln ID" : vuln_id,
 					"Title" : vuln_title,
 					"Synopsis" : synopsis_text,
+					"Description" : description_text,
 					"Risk" : risk_text,
-					"IP" : ip,
+					"CVSS" : CVSS_text,
+					"Solution" : solution_text,
+					"Hostname" : ip,
 					"Protocol" : proto,
-					"Port" : port
+					"Port" : port,
+					"References" : References_text
 			}
 			rows.append(row)
 	return rows
